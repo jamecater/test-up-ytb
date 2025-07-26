@@ -61,7 +61,7 @@ def print_banner():
 ║  🔍 Chức năng 1: Tìm video TikTok trùng lặp (Reup Detection)                ║
 ║  🔥 Chức năng 2: Tìm video TikTok trending theo quốc gia/hashtag            ║
 ║                                                                              ║
-║  Phát triển bởi: AI Assistant | Version: 1.0                                ║
+║  Phát triển bởi: Tâm Kem | Version: 1.0                                ║
 ╚══════════════════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 """
     print(banner)
