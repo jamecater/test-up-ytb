@@ -1,0 +1,3 @@
+@echo
+python main_fix3_quetsieunhanh_25_7.py
+pause

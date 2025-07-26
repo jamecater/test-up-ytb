@@ -1,0 +1,75 @@
+# HƯỚNG DẪN SỬ DỤNG - QUÉT & UPLOAD YOUTUBE SHORTS TỰ ĐỘNG
+
+## 1. CÀI ĐẶT PYTHON VÀ FFMPEG
+
+### 1.1. Cài Python
+- Tải Python 3.10 trở lên tại: https://www.python.org/downloads/
+- Cài đặt và **tick vào “Add Python to PATH”** khi cài.
+- Kiểm tra cài đặt:
+  ```
+  python --version
+  ```
+  Kết quả nên là Python 3.10.x hoặc cao hơn.
+
+### 1.2. Cài FFmpeg
+- Tải bản **ffmpeg-7.1.1-essentials_build** tại:
+  [https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip)
+- Giải nén ra một thư mục, ví dụ: `C:\ffmpeg-7.1.1-essentials_build`
+- Đảm bảo các file sau tồn tại:
+  - `C:\ffmpeg-7.1.1-essentials_build\bin\ffmpeg.exe`
+  - `C:\ffmpeg-7.1.1-essentials_build\bin\ffprobe.exe`
+- (Khuyến nghị) Thêm `C:\ffmpeg-7.1.1-essentials_build\bin` vào **Environment Variables > PATH** của Windows để dùng ffmpeg ở mọi nơi.
+- Đường dẫn trong script phải đúng với nơi bạn giải nén ffmpeg.
+
+## 2. CÀI ĐẶT THƯ VIỆN PYTHON
+
+Chạy lệnh sau trong terminal/cmd:
+
+```
+pip install google-api-python-client isodate yt-dlp colorama pandas selenium openpyxl requests
+```
+
+## 3. CHUẨN BỊ mapping.xlsx
+
+Tạo file `mapping.xlsx` với 2 cột:
+- `channel_id` (có thể là link channel)
+- `profile_id` (ID Genlogin profile)
+
+**Ví dụ:**
+
+| channel_id                                 | profile_id |
+|--------------------------------------------|------------|
+| https://www.youtube.com/@anhquoc2133       | 19983136   |
+| https://www.youtube.com/channel/UCxxxx...  | 19983137   |
+
+> **Lưu ý:** Nếu là link @user, script sẽ tự động lấy channel_id.
+
+## 5. CHẠY SCRIPT
+
+```
+python main_api_shorts.py
+```
+
+- Script sẽ tự động quét shorts mới nhất từ các kênh trong mapping.xlsx.
+- Khi phát hiện shorts mới đăng trong vòng 1 phút, sẽ tải về, xử lý, upload TikTok.
+- Log sẽ hiển thị trên terminal (có màu, emoji) và lưu ra file `activity.log` (không màu).
+
+## 6. LƯU Ý
+- **CHROMEDRIVER_PATH, FFMPEG_PATH, FFPROBE_PATH** cần đúng đường dẫn trên máy bạn.
+- **profile_id** là ID TikTok profile đã cấu hình Genlogin.
+- Nếu dùng link @user, cần mạng ổn định để lấy channel_id lần đầu.
+- Nếu muốn giảm thời gian quét, chỉnh `time.sleep(1)` trong hàm `worker` thành nhỏ hơn.
+
+## 7. LỖI THƯỜNG GẶP
+- **Lỗi API key:** Đảm bảo đã enable YouTube Data API v3 và dùng đúng API key.
+- **Lỗi profile_id:** Đảm bảo profile_id đúng, đã tạo profile trên Genlogin.
+- **Lỗi chromedriver/ffmpeg:** Đảm bảo các file này đúng đường dẫn, đúng phiên bản.
+- **Lỗi không hiện emoji:** Dùng Windows Terminal hoặc VSCode Terminal, đổi font nếu cần.
+
+## 8. LẤY channel_id TỪ LINK @user
+- Script sẽ tự động lấy channel_id từ link dạng @user.
+- Nếu muốn lấy thủ công: vào [https://commentpicker.com/youtube-channel-id.php](https://commentpicker.com/youtube-channel-id.php), dán link channel, lấy channel_id.
+
+---
+
+**Mọi thắc mắc hoặc lỗi, gửi log để được hỗ trợ!**
