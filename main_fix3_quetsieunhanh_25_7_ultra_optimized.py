@@ -105,6 +105,7 @@ from datetime import datetime
 from colorama import Fore, Style
 
 def log(profile_id, msg, level="INFO", substep=False):
+    """Log function với màu sắc"""
     color = {
         "INFO": Fore.CYAN,
         "NEW": Fore.GREEN,
@@ -206,22 +207,30 @@ def process_video(input_path, output_path):
 
 # --- START: TikTok upload functions from test_tiktok_upload.py ---
 def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None, description=None):
+    """Upload TikTok ULTRA NHANH với ChromeDriver auto-detection"""
     upload_start = time.time()
+    
+    # Kiểm tra video file
     if not os.path.exists(video_path):
         log(profile_id, f"❌ Video file not found: {video_path}", "ERROR")
         return False
+    
+    # Kiểm tra ChromeDriver trước
     if not CHROMEDRIVER_PATH or not os.path.exists(CHROMEDRIVER_PATH):
         log(profile_id, f"❌ ChromeDriver not found! Please download and install ChromeDriver", "ERROR")
         log(profile_id, f"📝 Download from: https://chromedriver.chromium.org/", "ERROR")
         return False
+    
     try:
-        resp = requests.get(f"http://127.0.0.1:19995/api/v3/profiles/start/{profile_id}", timeout=5)
+        # Khởi động GPM profile nhanh
+        resp = requests.get(f"http://127.0.0.1:19995/api/v3/profiles/start/{profile_id}", timeout=8)
         data = resp.json()
         if not data.get("success") or not data["data"].get("remote_debugging_address"):
             log(profile_id, f"❌ GPM start failed: {data.get('message', 'Unknown')}", "ERROR")
             return False
         wsEndpoint = data["data"]["remote_debugging_address"]
         log(profile_id, f"✅ GPM profile started: {wsEndpoint}", "INFO")
+        
     except requests.exceptions.ConnectionError:
         log(profile_id, f"❌ GPM Login not running! Please start GPM Login first", "ERROR")
         return False
@@ -231,8 +240,10 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
     except Exception as e:
         log(profile_id, f"❌ GPM connect error: {e}", "ERROR")
         return False
+    
+    # Chrome options tối ưu SIÊU NHANH
     chrome_options = Options()
-    chrome_options.page_load_strategy = 'eager'
+    chrome_options.page_load_strategy = 'eager'  # Không chờ load hết
     chrome_options.add_experimental_option("debuggerAddress", wsEndpoint)
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -244,6 +255,7 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
     chrome_options.add_argument("--disable-features=TranslateUI")
     chrome_options.add_argument("--disable-web-security")
     chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    # Thêm options để xử lý proxy lag
     chrome_options.add_argument("--disable-background-networking")
     chrome_options.add_argument("--disable-sync")
     chrome_options.add_argument("--disable-default-apps")
@@ -263,37 +275,51 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
     chrome_options.add_argument("--disable-plugins-discovery")
     chrome_options.add_argument("--disable-plugins")
     chrome_options.add_argument("--disable-images")
+    chrome_options.add_argument("--disable-javascript")  # Tắt JS nếu không cần
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")
     chrome_options.add_argument("--aggressive-cache-discard")
     chrome_options.add_argument("--memory-pressure-off")
     chrome_options.add_argument("--max_old_space_size=4096")
+    
     service = Service(executable_path=CHROMEDRIVER_PATH, log_path=os.devnull)
+    
     driver = None
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(10)
+        driver.set_page_load_timeout(15)  # Giảm timeout xuống 15s
         log(profile_id, f"✅ Chrome connected in {time.time()-upload_start:.1f}s", "TIMING")
+        
     except Exception as driver_error:
         log(profile_id, f"❌ Chrome driver error: {str(driver_error)[:100]}", "ERROR")
         log(profile_id, f"💡 Try updating ChromeDriver: https://chromedriver.chromium.org/", "WARNING")
         return False
+    
     try:
+        # Navigate nhanh
         nav_start = time.time()
         driver.get("https://www.tiktok.com/tiktokstudio/upload?lang=jp")
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 15)
+        
         log(profile_id, f"✅ Page loaded in {time.time()-nav_start:.1f}s", "TIMING")
+        
+        # Upload file nhanh nhất
         upload_file_start = time.time()
         upload_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="file"]')))
         upload_input.send_keys(os.path.abspath(video_path))
         log(profile_id, f"✅ File uploaded in {time.time()-upload_file_start:.1f}s", "TIMING")
+        
+        # Chờ video process - sử dụng WebDriverWait thông minh
         log(profile_id, f"⏳ Waiting for video to process...", "INFO", substep=True)
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 25).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
+        
+        # Chờ caption xuất hiện (có thể mất 5-10s sau khi video upload)
         log(profile_id, f"⏳ Waiting for caption to appear...", "INFO", substep=True)
         caption_appeared = False
-        for attempt in range(5):
+        for attempt in range(5):  # Giảm xuống 5 lần, mỗi lần 1s
             try:
+                # Thử tìm caption với nhiều selector
                 caption_selectors = [
                     '//div[@aria-autocomplete="list" and @class="notranslate public-DraftEditor-content" and @contenteditable="true"]',
                     'div[data-e2e="caption-container"] textarea',
@@ -303,28 +329,121 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                     '//div[@contenteditable="true"]',
                     '//div[@role="combobox" and @contenteditable="true"]'
                 ]
+                
                 for selector in caption_selectors:
                     try:
                         if selector.startswith('//'):
+                            # XPath
                             element = driver.find_element(By.XPATH, selector)
                         else:
+                            # CSS
                             element = driver.find_element(By.CSS_SELECTOR, selector)
+                        
                         if element.is_displayed():
                             log(profile_id, f"✅ Caption appeared after {attempt+1}s", "INFO", substep=True)
                             caption_appeared = True
                             break
                     except:
                         continue
+                
                 if caption_appeared:
                     break
+                    
             except:
                 pass
+            
             time.sleep(1)
+        
         if not caption_appeared:
             log(profile_id, f"⚠️ Caption not found after 5s, continuing...", "WARNING")
+        
+        # Scroll xuống cuối NGAY để tìm caption và nút Post
+        log(profile_id, f"⏳ Scrolling to bottom...", "INFO", substep=True)
+        
+        # Debug thông tin trang trước khi scroll
+        try:
+            page_height = driver.execute_script("return document.body.scrollHeight")
+            viewport_height = driver.execute_script("return window.innerHeight")
+            current_scroll = driver.execute_script("return window.pageYOffset")
+            log(profile_id, f"🔍 Page info: height={page_height}px, viewport={viewport_height}px, current={current_scroll}px", "INFO", substep=True)
+            
+            # Kiểm tra xem có thể scroll không
+            can_scroll = page_height > viewport_height
+            log(profile_id, f"🔍 Can scroll: {can_scroll}", "INFO", substep=True)
+            
+            if not can_scroll:
+                log(profile_id, f"⚠️ Page height equals viewport height, no scrolling needed", "WARNING", substep=True)
+        except Exception as debug_error:
+            log(profile_id, f"⚠️ Scroll debug failed: {str(debug_error)[:30]}", "WARNING", substep=True)
+        
+        # Thử nhiều cách scroll khác nhau
+        scroll_methods = [
+            "window.scrollTo(0, document.body.scrollHeight)",
+            "window.scrollTo(0, document.documentElement.scrollHeight)",
+            "window.scrollBy(0, 1000)",
+            "document.body.scrollTop = document.body.scrollHeight",
+            "document.documentElement.scrollTop = document.documentElement.scrollHeight"
+        ]
+        
+        for i, method in enumerate(scroll_methods):
+            try:
+                driver.execute_script(method)
+                time.sleep(0.2)  # Giảm xuống 0.2s
+                current_scroll = driver.execute_script("return window.pageYOffset")
+                log(profile_id, f"🔍 Scroll method {i+1}: position = {current_scroll}px", "INFO", substep=True)
+                
+                if current_scroll > 0:
+                    log(profile_id, f"✅ Scroll successful with method {i+1}", "INFO", substep=True)
+                    break
+            except Exception as e:
+                log(profile_id, f"⚠️ Scroll method {i+1} failed: {str(e)[:30]}", "WARNING", substep=True)
+        
+        # Thử scroll bằng cách nhấn phím Page Down
+        try:
+            body = driver.find_element(By.TAG_NAME, "body")
+            body.send_keys(Keys.PAGE_DOWN)
+            time.sleep(0.2)  # Giảm xuống 0.2s
+            body.send_keys(Keys.PAGE_DOWN)
+            time.sleep(0.2)  # Giảm xuống 0.2s
+            current_scroll = driver.execute_script("return window.pageYOffset")
+            log(profile_id, f"🔍 After Page Down: position = {current_scroll}px", "INFO", substep=True)
+        except Exception as e:
+            log(profile_id, f"⚠️ Page Down scroll failed: {str(e)[:30]}", "WARNING", substep=True)
+        
+        # Thử scroll bằng cách nhấn phím End
+        try:
+            body = driver.find_element(By.TAG_NAME, "body")
+            body.send_keys(Keys.END)
+            time.sleep(0.5)  # Giảm xuống 0.5s
+            current_scroll = driver.execute_script("return window.pageYOffset")
+            log(profile_id, f"🔍 After End key: position = {current_scroll}px", "INFO", substep=True)
+        except Exception as e:
+            log(profile_id, f"⚠️ End key scroll failed: {str(e)[:30]}", "WARNING", substep=True)
+        
+        # Thử scroll bằng cách tìm và click vào element cuối trang
+        try:
+            # Tìm tất cả element có thể scroll
+            scrollable_elements = driver.find_elements(By.CSS_SELECTOR, "[data-e2e='upload-form'], .upload-form, .scrollable, [class*='scroll']")
+            log(profile_id, f"🔍 Found {len(scrollable_elements)} potentially scrollable elements", "INFO", substep=True)
+            
+            for i, element in enumerate(scrollable_elements):
+                try:
+                    driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", element)
+                    time.sleep(0.5)
+                    scroll_top = driver.execute_script("return arguments[0].scrollTop", element)
+                    log(profile_id, f"🔍 Element {i+1} scroll position: {scroll_top}px", "INFO", substep=True)
+                except Exception as element_error:
+                    log(profile_id, f"⚠️ Element {i+1} scroll failed: {str(element_error)[:30]}", "WARNING", substep=True)
+        except Exception as e:
+            log(profile_id, f"⚠️ Element scroll failed: {str(e)[:30]}", "WARNING", substep=True)
+        
+        # Nhập caption nhanh với xpath tối ưu
         caption_start = time.time()
         caption_entered = False
+        
+        # Chỉ thử nhập caption nếu đã tìm thấy caption trước đó
         if caption_appeared:
+            # Thử nhiều selector khác nhau cho caption
             caption_selectors = [
                 (By.XPATH, '//div[@aria-autocomplete="list" and @class="notranslate public-DraftEditor-content" and @contenteditable="true"]'),
                 (By.CSS_SELECTOR, 'div[data-e2e="caption-container"] textarea'),
@@ -334,47 +453,70 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                 (By.XPATH, '//div[@contenteditable="true"]'),
                 (By.XPATH, '//div[@role="combobox" and @contenteditable="true"]')
             ]
+            
             for i, (by, selector) in enumerate(caption_selectors):
                 try:
                     caption_input = wait.until(EC.element_to_be_clickable((by, selector)))
+                    
                     caption_text = title or ""
                     if hashtags:
                         caption_text += " " + " ".join(hashtags)
+                    
+                    # Clear và nhập SIÊU NHANH
                     caption_input.click()
-                    time.sleep(0.05)
+                    time.sleep(0.1)  # Giảm xuống 0.1s
+                    
+                    # Clear text hiện tại - nhanh hơn
                     caption_input.send_keys(Keys.CONTROL, 'a')
-                    time.sleep(0.02)
-                    caption_input.send_keys(Keys.DELETE)
-                    time.sleep(0.02)
+                    time.sleep(0.05)  # Giảm xuống 0.05s
+                    caption_input.send_keys(Keys.DELETE)  # Dùng DELETE thay vì BACKSPACE
+                    time.sleep(0.05)  # Giảm xuống 0.05s
+                    
+                    # Nhập text mới - nhanh hơn
                     caption_input.send_keys(caption_text.strip())
-                    time.sleep(0.05)
+                    time.sleep(0.1)  # Giảm xuống 0.1s
+                    
                     log(profile_id, f"✅ Caption entered (selector {i+1}) in {time.time()-caption_start:.1f}s", "TIMING")
                     caption_entered = True
                     break
+                    
                 except Exception as e:
                     log(profile_id, f"⚠️ Caption selector {i+1} failed: {str(e)[:30]}", "WARNING", substep=True)
                     continue
+            
             if not caption_entered:
                 log(profile_id, f"⚠️ All caption selectors failed, skipping caption", "WARNING")
         else:
             log(profile_id, f"⚠️ Caption not found, skipping caption input", "WARNING")
+        
+        # Tìm và nhấn nút Post NGAY LẬP TỨC - KHÔNG DELAY
         post_start = time.time()
+        
+        # Chờ nút Post xuất hiện và sáng lên
         log(profile_id, f"⏳ Waiting for Post button to appear and be enabled...", "INFO", substep=True)
         post_button_found = False
         post_button = None
+        
+        # Thử tìm nút Post ngay lập tức mà không cần scroll
         try:
+            # Tìm tất cả button trên trang
             all_buttons = driver.find_elements(By.TAG_NAME, "button")
             log(profile_id, f"🔍 Found {len(all_buttons)} buttons on page", "INFO", substep=True)
+            
+            # Tìm button có text "Post" hoặc "Upload"
             for btn in all_buttons:
                 try:
                     btn_text = btn.text.strip().lower()
                     if "post" in btn_text or "upload" in btn_text:
                         log(profile_id, f"🔍 Found button with text: '{btn.text.strip()}'", "INFO", substep=True)
+                        
+                        # Kiểm tra xem có click được không
                         if btn.is_enabled() and btn.is_displayed():
                             aria_disabled = btn.get_attribute('aria-disabled')
                             data_disabled = btn.get_attribute('data-disabled')
                             is_loading = 'loading' in btn.get_attribute('class').lower()
                             log(profile_id, f"🔍 Button attributes: aria-disabled={aria_disabled}, data-disabled={data_disabled}, loading={is_loading}", "INFO", substep=True)
+                            
                             if aria_disabled != 'true' and data_disabled != 'true':
                                 post_button = btn
                                 post_button_found = True
@@ -384,20 +526,27 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                     continue
         except Exception as e:
             log(profile_id, f"⚠️ Immediate button search failed: {str(e)[:30]}", "WARNING", substep=True)
+        
+        # Nếu không tìm thấy ngay, thử chờ và tìm lại
         if not post_button_found:
-            for attempt in range(15):
+            for attempt in range(30):  # Giảm xuống 30 lần, mỗi lần 1s
                 try:
+                    # Thử tìm nút Post với selector chính
                     post_button = driver.find_element(By.CSS_SELECTOR, 'button[data-e2e="post_video_button"]')
                     if post_button.is_displayed():
+                        # Kiểm tra xem nút có sáng không
                         aria_disabled = post_button.get_attribute('aria-disabled')
                         data_disabled = post_button.get_attribute('data-disabled')
                         is_loading = 'loading' in post_button.get_attribute('class').lower()
+                        
                         log(profile_id, f"🔍 Button status: aria-disabled={aria_disabled}, data-disabled={data_disabled}, loading={is_loading}", "INFO", substep=True)
+                        
                         if aria_disabled != 'true' and data_disabled != 'true' and not is_loading:
                             log(profile_id, f"✅ Post button ready after {attempt+1}s", "INFO", substep=True)
                             post_button_found = True
                             break
                         elif aria_disabled != 'true' and data_disabled != 'true' and is_loading:
+                            # Nút sẵn sàng nhưng đang loading, thử click luôn
                             log(profile_id, f"⚠️ Post button ready but loading, trying to click anyway...", "WARNING", substep=True)
                             try:
                                 driver.execute_script("arguments[0].click();", post_button)
@@ -408,8 +557,10 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                                 log(profile_id, f"⚠️ Click while loading failed: {str(click_error)[:30]}", "WARNING", substep=True)
                         else:
                             log(profile_id, f"⏳ Post button still disabled, waiting...", "INFO", substep=True)
-                            if attempt >= 5 and aria_disabled != 'true' and data_disabled != 'true':
-                                log(profile_id, f"⚠️ Trying to click Post button after 5s even if loading...", "WARNING", substep=True)
+                            
+                            # Sau 10 lần thử, thử click ngay cả khi đang loading
+                            if attempt >= 10 and aria_disabled != 'true' and data_disabled != 'true':
+                                log(profile_id, f"⚠️ Trying to click Post button after 10s even if loading...", "WARNING", substep=True)
                                 try:
                                     driver.execute_script("arguments[0].click();", post_button)
                                     post_clicked = True
@@ -417,23 +568,33 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                                     return True
                                 except Exception as timeout_click_error:
                                     log(profile_id, f"⚠️ Timeout click failed: {str(timeout_click_error)[:30]}", "WARNING", substep=True)
+                        
                 except Exception as e:
                     log(profile_id, f"⚠️ Post button not found yet: {str(e)[:30]}", "WARNING", substep=True)
+                        
                 time.sleep(1)
+        
         if not post_button_found:
             log(profile_id, f"⚠️ Post button not ready after 30s, trying alternative selectors...", "WARNING")
+            
+            # Thử tìm nút Post ở bất kỳ đâu trên trang
             try:
+                # Tìm tất cả button có text "Post" hoặc "Upload"
                 all_buttons = driver.find_elements(By.TAG_NAME, "button")
                 log(profile_id, f"🔍 Found {len(all_buttons)} buttons on page", "INFO", substep=True)
+                
                 for btn in all_buttons:
                     try:
                         btn_text = btn.text.strip().lower()
                         if "post" in btn_text or "upload" in btn_text:
                             log(profile_id, f"🔍 Found button with text: '{btn.text.strip()}'", "INFO", substep=True)
+                            
+                            # Kiểm tra xem có click được không
                             if btn.is_enabled() and btn.is_displayed():
                                 aria_disabled = btn.get_attribute('aria-disabled')
                                 data_disabled = btn.get_attribute('data-disabled')
-                                log(profile_id, f"🔍 Button attributes: aria-disabled={aria_disabled}, data_disabled={data_disabled}", "INFO", substep=True)
+                                log(profile_id, f"🔍 Button attributes: aria-disabled={aria_disabled}, data-disabled={data_disabled}", "INFO", substep=True)
+                                
                                 if aria_disabled != 'true' and data_disabled != 'true':
                                     post_button = btn
                                     post_button_found = True
@@ -444,12 +605,15 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                         continue
             except Exception as e:
                 log(profile_id, f"⚠️ Alternative button search failed: {str(e)[:30]}", "WARNING", substep=True)
+        
         def is_post_button_ready(btn):
             try:
                 aria_disabled = btn.get_attribute('aria-disabled')
                 data_disabled = btn.get_attribute('data-disabled')
                 is_loading = 'loading' in btn.get_attribute('class').lower()
+                
                 log(profile_id, f"🔍 Button status: aria-disabled={aria_disabled}, data-disabled={data_disabled}, loading={is_loading}", "INFO", substep=True)
+                
                 return (
                     aria_disabled != 'true' and
                     data_disabled != 'true' and
@@ -459,16 +623,26 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
             except Exception as e:
                 log(profile_id, f"🔍 Button check error: {str(e)[:30]}", "WARNING", substep=True)
                 return False
+
         post_clicked = False
+        
+        # Click nút Post
         if post_button and post_button_found:
             try:
+                # Thử nhiều cách click khác nhau
                 click_methods = [
+                    # Method 1: JavaScript click
                     lambda: driver.execute_script("arguments[0].click();", post_button),
+                    # Method 2: Normal click
                     lambda: post_button.click(),
+                    # Method 3: Action chains
                     lambda: webdriver.ActionChains(driver).click(post_button).perform(),
+                    # Method 4: JavaScript dispatch event
                     lambda: driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true}));", post_button),
+                    # Method 5: Focus and Enter
                     lambda: (post_button.send_keys(Keys.SPACE) if post_button.is_enabled() else None)
                 ]
+                
                 for i, click_method in enumerate(click_methods):
                     try:
                         click_method()
@@ -478,11 +652,17 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                     except Exception as click_error:
                         log(profile_id, f"⚠️ Click method {i+1} failed: {str(click_error)[:30]}", "WARNING", substep=True)
                         continue
+                        
             except Exception as e:
                 log(profile_id, f"⚠️ All click methods failed: {str(e)[:50]}", "WARNING", substep=True)
+        
+        # Nếu không click được, thử các selector khác
         if not post_clicked:
+            # Thử tìm nút Post bằng JavaScript
             try:
                 log(profile_id, f"🔍 Searching for Post button with JavaScript...", "INFO", substep=True)
+                
+                # JavaScript để tìm tất cả button có text "Post"
                 js_find_post_button = """
                 var buttons = document.querySelectorAll('button');
                 for (var i = 0; i < buttons.length; i++) {
@@ -496,15 +676,22 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                 }
                 return null;
                 """
+                
                 post_button_js = driver.execute_script(js_find_post_button)
                 if post_button_js:
                     log(profile_id, f"✅ Found Post button with JavaScript: '{post_button_js.textContent}'", "INFO", substep=True)
+                    
+                    # Thử click bằng JavaScript
                     driver.execute_script("arguments[0].click();", post_button_js)
                     post_clicked = True
                     log(profile_id, f"✅ Post clicked (JavaScript search) in {time.time()-post_start:.1f}s", "TIMING")
+                    
             except Exception as js_error:
                 log(profile_id, f"⚠️ JavaScript search failed: {str(js_error)[:30]}", "WARNING", substep=True)
+            
+            # Nếu vẫn không được, thử các selector khác
             if not post_clicked:
+                # Thử các selector khác nhau để tìm nút Post
                 selectors = [
                     '//button[contains(text(), "Upload video")]',
                     'button[data-e2e="post_video_button"]',
@@ -515,29 +702,41 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                     '//button[contains(text(), "Publish")]',
                     '//button[contains(text(), "Share")]',
                     '//button[@type="submit"]',
-                    '//button[contains(@class, "submit")]',
+                    '//button[contains(@class, "submit")]'
                 ]
+                
                 for i, selector in enumerate(selectors):
                     try:
                         if '//button' in selector:
+                            # XPath selector
                             alt_post_button = wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
                         else:
+                            # CSS selector
                             alt_post_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                        
+                        # Scroll button vào view nhanh
                         driver.execute_script("arguments[0].scrollIntoView({behavior: 'instant', block: 'center'});", alt_post_button)
+                        
+                        # Chờ button sẵn sàng bằng WebDriverWait
                         WebDriverWait(driver, 10).until(lambda d: is_post_button_ready(alt_post_button))
+                        
+                        # Nhấn NGAY LẬP TỨC
                         alt_post_button.click()
                         post_clicked = True
                         log(profile_id, f"✅ Post clicked (selector {i+1}) in {time.time()-post_start:.1f}s", "TIMING")
                         break
+                        
                     except Exception as e:
                         log(profile_id, f"⚠️ Selector {i+1} failed: {str(e)[:30]}", "WARNING", substep=True)
                         continue
+        
         if not post_clicked:
             log(profile_id, f"❌ No Post button found", "ERROR")
+            # Debug: tìm tất cả button trên trang
             try:
                 all_buttons = driver.find_elements(By.TAG_NAME, "button")
                 log(profile_id, f"🔍 Debug - Found {len(all_buttons)} buttons on page", "INFO")
-                for i, btn in enumerate(all_buttons[:5]):
+                for i, btn in enumerate(all_buttons[:5]):  # Show first 5 buttons
                     try:
                         btn_text = btn.text.strip()
                         btn_class = btn.get_attribute("class")
@@ -548,6 +747,8 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
             except:
                 pass
             return False
+        
+        # Xử lý popup "Post now" nếu có - NHẤN TRONG 1-2s
         try:
             confirm_btn = WebDriverWait(driver, 2).until(
                 EC.element_to_be_clickable((By.XPATH, '//button[.//div[text()="Post now"]]'))
@@ -557,9 +758,12 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
             log(profile_id, "✅ Post now clicked instantly", "INFO")
         except:
             log(profile_id, "ℹ️ No copyright popup", "INFO")
+        
+        # Chờ upload thành công - kiểm tra URL thay đổi NHANH
         success_start = time.time()
         try:
-            WebDriverWait(driver, 15).until(
+            # Chờ URL thay đổi hoặc success indicators với timeout ngắn
+            WebDriverWait(driver, 20).until(  # Giảm xuống 20s
                 lambda d: (
                     d.current_url != "https://www.tiktok.com/tiktokstudio/upload?lang=jp" or
                     len(d.find_elements(By.XPATH, '//div[contains(text(), "Your video is being uploaded")]')) > 0 or
@@ -567,25 +771,36 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                     len(d.find_elements(By.XPATH, '//div[contains(text(), "Video uploaded")]')) > 0
                 )
             )
+            
             success_time = time.time() - success_start
             total_time = time.time() - upload_start
+            
             log(profile_id, f"🎉 Upload SUCCESS in {success_time:.1f}s (total: {total_time:.1f}s)", "OK")
+            
         except:
-            WebDriverWait(driver, 8).until(lambda d: True)
+            # Fallback: chờ thời gian cố định ngắn
+            WebDriverWait(driver, 10).until(lambda d: True)  # Giảm xuống 10s
             total_time = time.time() - upload_start
             log(profile_id, f"⚠️ Upload likely success (timeout) - total: {total_time:.1f}s", "WARNING")
+        
         return True
+        
     except Exception as e:
         total_time = time.time() - upload_start
         log(profile_id, f"❌ Upload failed: {str(e)} (time: {total_time:.1f}s)", "ERROR")
+        # Thêm debug info chi tiết
         try:
             if driver:
                 current_url = driver.current_url
                 log(profile_id, f"🔍 Debug - Current URL: {current_url}", "INFO")
                 page_source_length = len(driver.page_source)
                 log(profile_id, f"🔍 Debug - Page source length: {page_source_length}", "INFO")
+                
+                # Tìm tất cả button trên trang
                 all_buttons = driver.find_elements(By.TAG_NAME, "button")
                 log(profile_id, f"🔍 Debug - Found {len(all_buttons)} buttons on page", "INFO")
+                
+                # Tìm button có text "Post" hoặc "Upload"
                 post_buttons = []
                 for btn in all_buttons:
                     try:
@@ -601,41 +816,53 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                             })
                     except:
                         pass
+                
                 if post_buttons:
                     log(profile_id, f"🔍 Debug - Found {len(post_buttons)} potential post buttons:", "INFO")
                     for i, btn in enumerate(post_buttons):
                         log(profile_id, f"🔍 Button {i+1}: text='{btn['text']}', aria='{btn['aria']}', disabled={btn['disabled']}, data_disabled={btn['data_disabled']}", "INFO", substep=True)
                 else:
                     log(profile_id, f"🔍 Debug - No post buttons found", "INFO")
+                    
         except Exception as debug_error:
             log(profile_id, f"🔍 Debug error: {str(debug_error)[:50]}", "WARNING")
         return False
+        
     finally:
+        # Cleanup nhanh
         try:
             if driver:
                 driver.quit()
         except:
             pass
+        
         try:
-            requests.get(f"http://127.0.0.1:19995/api/v3/profiles/close/{profile_id}", timeout=1)
+            requests.get(f"http://127.0.0.1:19995/api/v3/profiles/close/{profile_id}", timeout=2)
         except:
             pass
 
 def upload_with_retry(profile_id, video_path, title, hashtags, max_retries=2):
+    """Upload với retry mechanism ULTRA NHANH"""
     for attempt in range(max_retries):
         try:
             log(profile_id, f"🚀 Upload attempt #{attempt + 1}/{max_retries}", "TIMING", substep=True)
+            
             if attempt > 0:
-                time.sleep(0.5)
-                log(profile_id, f"⏳ 0.5s retry delay", "INFO", substep=True)
+                # Ngắn hơn delay retry
+                time.sleep(1)  # Giảm xuống 1s
+                log(profile_id, f"⏳ 1s retry delay", "INFO", substep=True)
+            
             result = upload_to_tiktok_gpmlogin(profile_id, video_path, title, hashtags)
+            
             if result:
                 log(profile_id, f"✅ Upload success attempt #{attempt + 1}", "OK", substep=True)
                 return True
             else:
                 log(profile_id, f"❌ Upload failed attempt #{attempt + 1}", "WARNING", substep=True)
+                
         except Exception as e:
             log(profile_id, f"❌ Exception attempt #{attempt + 1}: {str(e)[:50]}", "ERROR", substep=True)
+    
     log(profile_id, f"❌ Upload failed after {max_retries} attempts", "ERROR", substep=True)
     return False
 # --- END: TikTok upload functions ---
@@ -673,16 +900,13 @@ def get_latest_shorts_video_ytdlp(channel_url):
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
                     title = entry.get('title', '')
                     scan_time = time.time() - scan_start
-                    print(f"🚀 Scan completed in {scan_time:.2f}s")
                     return video_id, video_url, title
 
     except Exception as e:
         scan_time = time.time() - scan_start
-        print(f"❌ Scan failed in {scan_time:.2f}s: {str(e)[:100]}")
         return None, None, None
 
     scan_time = time.time() - scan_start
-    print(f"🚀 Scan completed in {scan_time:.2f}s - No video found")
     return None, None, None
 
 def get_last_video_id_from_mapping(channel_url, profile_id):
@@ -744,7 +968,7 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
         # BƯỚC 1: Download ULTRA NHANH
         download_start = time.time()
         video_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
-        log(profile_id, f"📥 Downloading: {video_url}", "INFO", substep=True)
+        log(profile_id, f"📥 Downloading from: {video_url}", "INFO", substep=True)
         
         # yt-dlp tối ưu SIÊU NHANH cho 1080p
         ydl_opts = {
@@ -811,12 +1035,12 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
                 pass
                 
         else:
-            log(profile_id, f"❌ [{now_str}] ULTRA FAILED: {processed_path}", "ERROR")
+            log(profile_id, f"❌ [{now_str}] PIPELINE FAILED: {processed_path}", "ERROR")
             log(profile_id, f"📊 Total time: {total_time:.1f}s", "TIMING", substep=True)
             
     except Exception as e:
         total_time = time.time() - pipeline_start
-        log(profile_id, f"❌ [{now_str}] ULTRA ERROR: {str(e)[:100]}", "ERROR")
+        log(profile_id, f"❌ [{now_str}] PIPELINE ERROR: {str(e)[:100]}", "ERROR")
         log(profile_id, f"📊 Error at: {total_time:.1f}s", "TIMING", substep=True)
 
 def worker_selenium(channel_url, profile_id):
@@ -858,7 +1082,7 @@ def worker_selenium(channel_url, profile_id):
             loop_start = time.time()
             
             try:
-                log(profile_id, "🔍 Scanning...", "INFO")
+                log(profile_id, "🔍 Scanning for new video...", "INFO")
                 video_id, video_url, title = get_latest_shorts_video_ytdlp(channel_url)
                 
                 scan_time = time.time() - loop_start
@@ -887,7 +1111,7 @@ def worker_selenium(channel_url, profile_id):
                     time.sleep(random.uniform(0.2, 0.5))
                     
                 elif video_id:
-                    log(profile_id, f"⏸️ Same: {video_id}", "INFO")
+                    log(profile_id, f"⏸️ Same as baseline: {video_id}", "INFO")
                     time.sleep(random.uniform(0.2, 0.5))
                     
                 else:
