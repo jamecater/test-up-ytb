@@ -769,7 +769,7 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
         
         # Xử lý popup "Post now" nếu có - NHẤN TRONG 1-2s
         try:
-            confirm_btn = WebDriverWait(driver, 2).until(
+            confirm_btn = WebDriverWait(driver, 4).until(
                 EC.element_to_be_clickable((By.XPATH, '//button[.//div[text()="Post now"]]'))
             )
             log(profile_id, "✅ Copyright popup detected - clicking immediately", "INFO")
