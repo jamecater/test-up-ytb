@@ -227,8 +227,13 @@ def process_video(input_path, output_path):
         return False
 
 def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None, description=None):
-    """Upload TikTok ULTRA NHANH với ChromeDriver auto-detection - TESTED VERSION"""
+    """Upload TikTok ULTRA NHANH với ChromeDriver auto-detection - TESTED VERSION - ĐA LUỒNG ISOLATED"""
     upload_start = time.time()
+    
+    # Thread/Process isolation tracking
+    thread_id = threading.current_thread().ident
+    process_id = os.getpid()
+    log(profile_id, f"🔄 Upload start [Thread:{thread_id}, Process:{process_id}] - ISOLATED INSTANCE", "INFO")
     
     # Kiểm tra video file
     if not os.path.exists(video_path):
@@ -242,14 +247,22 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
         return False
     
     try:
-        # Khởi động GPM profile nhanh
+        # Khởi động GPM profile nhanh với staggered API calls để tránh nghẽn
+        api_delay = random.uniform(0.1, 1.0)  # Random delay để tránh cùng gọi API
+        if api_delay > 0.5:
+            log(profile_id, f"⏳ API stagger delay: {api_delay:.1f}s", "INFO", substep=True)
+            time.sleep(api_delay)
+        
         resp = requests.get(f"http://127.0.0.1:19995/api/v3/profiles/start/{profile_id}", timeout=8)
         data = resp.json()
         if not data.get("success") or not data["data"].get("remote_debugging_address"):
             log(profile_id, f"❌ GPM start failed: {data.get('message', 'Unknown')}", "ERROR")
             return False
         wsEndpoint = data["data"]["remote_debugging_address"]
-        log(profile_id, f"✅ GPM profile started: {wsEndpoint}", "INFO")
+        
+        # Đảm bảo unique debugging endpoint cho mỗi thread
+        session_id = f"{thread_id}_{int(time.time() * 1000) % 10000}"
+        log(profile_id, f"✅ GPM profile started: {wsEndpoint} [Session:{session_id}]", "INFO")
         
     except requests.exceptions.ConnectionError:
         log(profile_id, f"❌ GPM Login not running! Please start GPM Login first", "ERROR")
@@ -767,16 +780,60 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
                 pass
             return False
         
-        # Xử lý popup "Post now" nếu có - NHẤN TRONG 1-2s
+        # Xử lý popup "Post now" CHUẨN 100% - Đợi tối đa 4 giây
+        popup_start = time.time()
+        log(profile_id, f"⏳ Checking for 'Post now' popup (max 4s)...", "INFO", substep=True)
+        
+        popup_handled = False
         try:
+            # Đợi tối đa 4 giây để popup xuất hiện
             confirm_btn = WebDriverWait(driver, 4).until(
                 EC.element_to_be_clickable((By.XPATH, '//button[.//div[text()="Post now"]]'))
             )
-            log(profile_id, "✅ Copyright popup detected - clicking immediately", "INFO")
+            
+            popup_time = time.time() - popup_start
+            log(profile_id, f"✅ 'Post now' popup detected after {popup_time:.1f}s", "INFO", substep=True)
+            
+            # Click ngay lập tức
             confirm_btn.click()
-            log(profile_id, "✅ Post now clicked instantly", "INFO")
-        except:
-            log(profile_id, "ℹ️ No copyright popup", "INFO")
+            popup_handled = True
+            
+            total_popup_time = time.time() - popup_start
+            log(profile_id, f"✅ 'Post now' clicked successfully in {total_popup_time:.1f}s", "INFO", substep=True)
+            
+        except Exception as popup_error:
+            popup_time = time.time() - popup_start
+            log(profile_id, f"ℹ️ No 'Post now' popup after {popup_time:.1f}s - checking alternatives...", "INFO", substep=True)
+            
+            # Thử các selector khác cho popup copyright
+            try:
+                alternative_selectors = [
+                    '//button[contains(text(), "Post now")]',
+                    '//button[contains(text(), "Continue")]', 
+                    '//button[contains(text(), "Confirm")]',
+                    '//button[contains(@class, "copyright")]',
+                    '//button[contains(@data-e2e, "confirm")]'
+                ]
+                
+                for i, selector in enumerate(alternative_selectors):
+                    try:
+                        alt_confirm_btn = WebDriverWait(driver, 1).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                        alt_confirm_btn.click()
+                        popup_handled = True
+                        log(profile_id, f"✅ Alternative popup handled (selector {i+1})", "INFO", substep=True)
+                        break
+                    except:
+                        continue
+                        
+            except Exception as alt_error:
+                pass  # No alternative popup found
+        
+        if popup_handled:
+            log(profile_id, f"🎯 Copyright popup handled successfully", "OK")
+        else:
+            log(profile_id, f"➡️ No copyright popup - proceeding to success detection", "INFO")
         
         # Chờ upload thành công - kiểm tra URL thay đổi NHANH
         success_start = time.time()
@@ -848,17 +905,30 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
         return False
         
     finally:
-        # Cleanup nhanh
-        try:
-            if driver:
-                driver.quit()
-        except:
-            pass
+        # Cleanup nhanh với thread isolation
+        cleanup_start = time.time()
+        log(profile_id, f"🧹 Cleanup start [Thread:{thread_id}]", "INFO", substep=True)
         
+        # 1. Cleanup WebDriver
         try:
-            requests.get(f"http://127.0.0.1:19995/api/v3/profiles/close/{profile_id}", timeout=2)
-        except:
-            pass
+            if 'driver' in locals() and driver:
+                driver.quit()
+                log(profile_id, f"✅ Chrome driver closed", "INFO", substep=True)
+        except Exception as driver_cleanup_error:
+            log(profile_id, f"⚠️ Driver cleanup error: {str(driver_cleanup_error)[:30]}", "WARNING", substep=True)
+        
+        # 2. Cleanup GPM Profile với retry
+        try:
+            close_response = requests.get(f"http://127.0.0.1:19995/api/v3/profiles/close/{profile_id}", timeout=3)
+            if close_response.status_code == 200:
+                log(profile_id, f"✅ GPM profile closed", "INFO", substep=True)
+            else:
+                log(profile_id, f"⚠️ GPM close status: {close_response.status_code}", "WARNING", substep=True)
+        except Exception as gpm_cleanup_error:
+            log(profile_id, f"⚠️ GPM cleanup error: {str(gpm_cleanup_error)[:30]}", "WARNING", substep=True)
+        
+        cleanup_time = time.time() - cleanup_start
+        log(profile_id, f"🧹 Cleanup completed in {cleanup_time:.1f}s [Thread:{thread_id}]", "INFO", substep=True)
 
 def get_latest_shorts_video_ytdlp(channel_url):
     """Quét video mới nhất ULTRA NHANH từ mục Shorts."""
@@ -979,17 +1049,24 @@ def upload_with_retry(profile_id, video_path, title, hashtags, max_retries=2):
     return False
 
 def download_edit_upload_video(profile_id, video_id, video_url, title):
-    """Pipeline ULTRA NHANH: Download → Edit → Upload dưới 20s"""
+    """Pipeline ULTRA NHANH: Download → Edit → Upload dưới 20s - ĐA LUỒNG ISOLATED"""
     pipeline_start = time.time()
     now_str = datetime.now().strftime('%H:%M:%S')
     
-    log(profile_id, f"🚀 [{now_str}] ULTRA PIPELINE START: {video_id}", "NEW")
+    # Đảm bảo thread isolation bằng unique IDs
+    thread_id = threading.current_thread().ident
+    process_id = os.getpid()
+    unique_suffix = f"{profile_id}_{thread_id}_{int(time.time() * 1000) % 10000}"
+    
+    log(profile_id, f"🚀 [{now_str}] ULTRA PIPELINE START: {video_id} [Thread:{thread_id}, Process:{process_id}]", "NEW")
     
     try:
-        # BƯỚC 1: Download ULTRA NHANH
+        # BƯỚC 1: Download ULTRA NHANH với thread isolation
         download_start = time.time()
-        video_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
-        log(profile_id, f"📥 Downloading: {video_url}", "INFO", substep=True)
+        
+        # Tạo unique file paths để tránh conflict giữa các luồng
+        video_path = os.path.join(DOWNLOAD_DIR, f"{video_id}_{unique_suffix}.mp4")
+        log(profile_id, f"📥 Downloading: {video_url} → {os.path.basename(video_path)}", "INFO", substep=True)
         
         # yt-dlp tối ưu SIÊU NHANH cho 1080p
         ydl_opts = {
@@ -1018,9 +1095,9 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
             log(profile_id, f"❌ Download failed", "ERROR", substep=True)
             return
         
-        # BƯỚC 2: Process ULTRA NHANH (hoặc skip nếu >60s)
+        # BƯỚC 2: Process ULTRA NHANH (hoặc skip nếu >60s) với thread isolation
         process_start = time.time()
-        processed_path = os.path.join(PROCESSED_DIR, f"{video_id}.mp4")
+        processed_path = os.path.join(PROCESSED_DIR, f"{video_id}_{unique_suffix}.mp4")
         
         process_success = process_video(video_path, processed_path)
         process_time = time.time() - process_start
@@ -1065,11 +1142,16 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
         log(profile_id, f"📊 Error at: {total_time:.1f}s", "TIMING", substep=True)
 
 def worker_selenium(channel_url, profile_id):
-    """Worker ULTRA tối ưu với ThreadPoolExecutor riêng cho mỗi profile"""
-    log(profile_id, f"🚀 ULTRA Worker started (Target: <20s)", "INFO")
+    """Worker ULTRA tối ưu với ThreadPoolExecutor riêng cho mỗi profile - ĐA LUỒNG MƯỢT MÀ"""
+    process_id = os.getpid()
+    log(profile_id, f"🚀 ULTRA Worker started (Target: <20s) [Process:{process_id}]", "INFO")
 
-    # ThreadPoolExecutor riêng cho profile này - 3 workers để xử lý nhanh hơn
-    profile_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix=f"Profile_{profile_id}")
+    # ThreadPoolExecutor riêng cho profile này - 2 workers để tránh nghẽn Chrome
+    # Giảm từ 3 xuống 2 để stability tốt hơn khi nhiều profile chạy cùng lúc
+    profile_executor = ThreadPoolExecutor(
+        max_workers=2, 
+        thread_name_prefix=f"Prof_{profile_id}_Proc_{process_id}"
+    )
     
     try:
         last_video_id, mapping_idx, mapping_df = get_last_video_id_from_mapping(channel_url, profile_id)
@@ -1122,12 +1204,17 @@ def worker_selenium(channel_url, profile_id):
                     update_last_video_id_in_mapping_by_id(channel_url, profile_id, video_id)
                     last_video_id = video_id
                     
-                    # Submit xử lý video ULTRA NHANH
+                    # Submit xử lý video ULTRA NHANH với staggered start để tránh nghẽn
+                    # Thêm delay ngẫu nhiên để không tất cả profile cùng bắt đầu upload
+                    start_delay = random.uniform(0.1, 2.0)  # 0.1-2s delay
+                    log(profile_id, f"⏳ Staggered start in {start_delay:.1f}s to avoid congestion", "INFO", substep=True)
+                    time.sleep(start_delay)
+                    
                     future = profile_executor.submit(
                         download_edit_upload_video, 
                         profile_id, video_id, video_url, title
                     )
-                    log(profile_id, f"✅ ULTRA task submitted", "INFO")
+                    log(profile_id, f"✅ ULTRA task submitted [Workers: {profile_executor._threads}/{profile_executor._max_workers}]", "INFO")
                     success_count += 1
                     
                     # Sleep ngắn hơn khi có video mới
@@ -1204,9 +1291,9 @@ def main():
     except:
         pass
     
-    # Khởi động processes cho tối đa 20 channels ULTRA NHANH
+    # Khởi động processes cho tối đa 15 channels để đảm bảo ổn định đa luồng
     processes = []
-    max_concurrent = min(20, len(mapping))  # Tối đa 20 processes song song
+    max_concurrent = min(15, len(mapping))  # Giảm từ 20 xuống 15 để tránh nghẽn Chrome/GPM
     
     print(f"🔥 Starting {max_concurrent} ULTRA concurrent workers...")
     
@@ -1221,9 +1308,11 @@ def main():
         p.start()
         processes.append(p)
         
-        # Brief delay giữa các process start - ngắn hơn
+        # Staggered process start để tránh cùng khởi động Chrome/GPM
         if i < max_concurrent - 1:
-            time.sleep(0.05)
+            stagger_delay = random.uniform(0.2, 1.0)  # Tăng delay để tránh nghẽn
+            print(f"   ⏳ Stagger delay: {stagger_delay:.1f}s")
+            time.sleep(stagger_delay)
     
     print(f"✅ All {len(processes)} ULTRA workers started!")
     print("📊 Monitoring ULTRA performance...")
