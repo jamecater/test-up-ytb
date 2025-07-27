@@ -156,20 +156,16 @@ def process_video(input_path, output_path):
         
         if duration >= 60:
             # Video đủ dài: KHÔNG edit, copy nguyên bản
-            log('SYSTEM', f"⚡ Video {duration:.1f}s ≥60s → Upload nguyên bản", "TIMING", True)
             import shutil
             shutil.copy2(input_path, output_path)
             
             process_time = time.time() - start_time
-            log('SYSTEM', f"✅ Copy nguyên bản in {process_time:.2f}s", "TIMING", True)
             return True
             
         else:
             # Video ngắn: Lặp lại để tạo 60-65s
             target_duration = random.randint(60, 65)
             loop_count = int(target_duration // duration) + 1
-            
-            log('SYSTEM', f"⚡ Video {duration:.1f}s → Loop x{loop_count} = {target_duration}s", "TIMING", True)
             
             # Dùng stream_loop để lặp lại nhanh nhất
             cmd = [
@@ -189,20 +185,16 @@ def process_video(input_path, output_path):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             
             if result.returncode != 0:
-                log('SYSTEM', f"❌ FFmpeg error: {result.stderr.decode()[:100]}", "ERROR", True)
                 return False
         
         process_time = time.time() - start_time
         
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            log('SYSTEM', f"✅ Processed in {process_time:.2f}s", "TIMING", True)
             return True
         else:
-            log('SYSTEM', f"❌ Processing failed", "ERROR", True)
             return False
             
     except Exception as e:
-        log('SYSTEM', f"❌ Process error: {e}", "ERROR", True)
         return False
 
 # --- START: TikTok upload functions from test_tiktok_upload.py ---
@@ -962,7 +954,7 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
     pipeline_start = time.time()
     now_str = datetime.now().strftime('%H:%M:%S')
     
-    log(profile_id, f"🚀 [{now_str}] ULTRA PIPELINE START: {video_id}", "NEW")
+    log(profile_id, f"🚀 [{now_str}] PIPELINE START: {video_id}", "NEW")
     
     try:
         # BƯỚC 1: Download ULTRA NHANH
@@ -1021,7 +1013,7 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
         total_time = time.time() - pipeline_start
         
         if upload_success:
-            log(profile_id, f"🎉 [{now_str}] ULTRA SUCCESS!", "OK")
+            log(profile_id, f"🎉 [{now_str}] PIPELINE SUCCESS!", "OK")
             log(profile_id, f"📊 D:{download_time:.1f}s P:{process_time:.1f}s U:{upload_time:.1f}s = {total_time:.1f}s", "TIMING")
             
             # Log chi tiết vào file
