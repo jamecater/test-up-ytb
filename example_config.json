@@ -1,0 +1,46 @@
+{
+  "tasks": [
+    {
+      "type": "reup_detect",
+      "video_url": "https://www.tiktok.com/@user/video/123456789",
+      "max_results": 50,
+      "threshold": 0.8,
+      "keywords": ["funny", "viral", "meme"],
+      "save_csv": true
+    },
+    {
+      "type": "trending",
+      "country": "US",
+      "max_results": 30,
+      "filters": {
+        "min_views": 50000,
+        "min_likes": 2000,
+        "min_duration_seconds": 10,
+        "max_duration_seconds": 60
+      },
+      "save_csv": true,
+      "save_json": false
+    },
+    {
+      "type": "trending",
+      "hashtag": "funny",
+      "max_results": 25,
+      "filters": {
+        "min_views": 10000,
+        "title_contains": "laugh"
+      },
+      "save_csv": true,
+      "save_json": true
+    },
+    {
+      "type": "trending",
+      "country": "VN",
+      "max_results": 20,
+      "filters": {
+        "max_hours_ago": 24,
+        "min_duration_seconds": 15
+      },
+      "save_csv": true
+    }
+  ]
+}
