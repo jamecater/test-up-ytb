@@ -32,7 +32,7 @@ sys.stderr = open(os.devnull, 'w')
 init(autoreset=True)
 
 # Chọn chế độ chạy: 'api' hoặc 'yt_dlp'
-MODE = 'yt_dlp'  # hoặc 'yt_dlp'
+MODE = 'yt_dlp'
 
 DOWNLOAD_DIR = 'downloads'
 PROCESSED_DIR = 'processed'
@@ -53,7 +53,6 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 
-# Thêm logging thời gian upload
 def log_upload_time(video_id, profile_id, total_time):
     """Ghi log thời gian upload vào file upload_time.log"""
     try:
@@ -182,8 +181,6 @@ def process_video(input_path, output_path):
     except Exception as e:
         log('SYSTEM', f"❌ Process error: {e}", "ERROR", True)
         return False
-
-# Sửa hàm upload_to_tiktok_gpmlogin để nhận thêm title, hashtags
 
 def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None, description=None):
     """Upload TikTok SIÊU NHANH với WebDriverWait thay vì sleep"""
@@ -389,71 +386,6 @@ def upload_to_tiktok_gpmlogin(profile_id, video_path, title=None, hashtags=None,
         except:
             pass
 
-# Hàm download_video cũ - đã thay thế bằng logic mới trong download_edit_upload_video
-def download_video(video_url, output_path):
-    """Hàm cũ - chỉ giữ để tương thích - logic mới ở download_edit_upload_video"""
-    pass
-
-def download_latest_shorts(channel_url, return_id_and_recent=False):
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': True,
-        'playlist_items': '1',
-        'ffmpeg_location': r'C:\ffmpeg-7.1.1-essentials_build\bin',
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(channel_url, download=False)
-            if 'entries' in info and info['entries']:
-                latest = info['entries'][0]
-                video_id = latest['id']
-                video_url = f"https://www.youtube.com/watch?v={video_id}"
-                video_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
-                ydl_detail_opts = {'quiet': True, 'no_warnings': True, 'ffmpeg_location': r'C:\ffmpeg-7.1.1-essentials_build\bin'}
-                with yt_dlp.YoutubeDL(ydl_detail_opts) as ydl2:
-                    detail = ydl2.extract_info(video_url, download=False)
-                    is_recent = False
-                    timestamp = detail.get('timestamp', None)
-                    if timestamp is not None:
-                        now = int(time.time())
-                        video_time = int(timestamp)
-                        if now - video_time <= 120:
-                            is_recent = True
-                    # Lấy tiêu đề, mô tả và hashtag
-                    title = detail.get('title', '')
-                    description = detail.get('description', '')
-                    hashtags = []
-                    if 'tags' in detail and detail['tags']:
-                        hashtags = [f"#{tag}" for tag in detail['tags'] if tag]
-                    if os.path.exists(video_path):
-                        if return_id_and_recent:
-                            return None, video_id, is_recent, title, hashtags, description
-                        return None
-                    if is_recent:
-                        ydl_download_opts = {
-                            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best',
-                            'outtmpl': video_path,
-                            'quiet': True,
-                            'no_warnings': True,
-                            'ffmpeg_location': r'C:\ffmpeg-7.1.1-essentials_build\bin'
-                        }
-                        with yt_dlp.YoutubeDL(ydl_download_opts) as ydl3:
-                            ydl3.download([video_url])
-                        if os.path.exists(video_path):
-                            if return_id_and_recent:
-                                return video_path, video_id, is_recent, title, hashtags, description
-                            return video_path
-                    else:
-                        if return_id_and_recent:
-                            return None, video_id, is_recent, title, hashtags, description
-                        return None
-    except Exception as e:
-        print(f"Lỗi tải video: {e}")
-    if return_id_and_recent:
-        return None, None, False, '', [], ''
-    return None
-
 def get_latest_shorts_video_ytdlp(channel_url):
     """Quét video mới nhất SIÊU NHANH từ mục Shorts."""
     scan_start = time.time()
@@ -520,17 +452,6 @@ def get_last_video_id_from_mapping(channel_url, profile_id):
             return str(row['video_id']) if 'video_id' in row and not pd.isna(row['video_id']) else None, idx, df
     return None, None, df
 
-def update_last_video_id_in_mapping(idx, df, new_video_id):
-    import os
-    if 'video_id' not in df.columns:
-        df['video_id'] = None
-    df.at[idx, 'video_id'] = new_video_id
-    # Lưu theo format gốc
-    if os.path.exists(MAPPING_FILE):
-        df.to_excel(MAPPING_FILE, index=False)
-    else:
-        df.to_csv(MAPPING_CSV, index=False)
-
 def update_last_video_id_in_mapping_by_id(channel_id, profile_id, new_video_id):
     import os
     try:
@@ -565,125 +486,6 @@ def update_last_video_id_in_mapping_by_id(channel_id, profile_id, new_video_id):
     except Exception as e:
         log(profile_id, f"❌ Lỗi update mapping: {e}", "ERROR")
 
-def get_last_video_id_from_mapping_by_id(channel_id, profile_id):
-    import os
-    if os.path.exists(MAPPING_FILE):
-        df = pd.read_excel(MAPPING_FILE)
-    elif os.path.exists(MAPPING_CSV):
-        df = pd.read_csv(MAPPING_CSV)
-    else:
-        return None
-    channel_col = 'channel_url' if 'channel_url' in df.columns else 'channel_id'
-    for idx, row in df.iterrows():
-        if str(row[channel_col]) == str(channel_id) and str(row['profile_id']) == str(profile_id):
-            return str(row['video_id']) if 'video_id' in row and not pd.isna(row['video_id']) else None
-    return None
-
-def worker_selenium(channel_url, profile_id):
-    """Worker tối ưu với ThreadPoolExecutor riêng cho mỗi profile"""
-    log(profile_id, f"🚀 Worker started (Optimized Pipeline)", "INFO")
-
-    # Tạo ThreadPoolExecutor riêng cho profile này
-    profile_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix=f"Profile_{profile_id}")
-    
-    try:
-        last_video_id, mapping_idx, mapping_df = get_last_video_id_from_mapping(channel_url, profile_id)
-        log(profile_id, f"✅ Mapping loaded. Baseline: {last_video_id}", "INFO")
-    except Exception as mapping_error:
-        log(profile_id, f"❌ Mapping error: {mapping_error}", "ERROR")
-        return
-    
-    # Auto-set baseline nếu chưa có
-    if not last_video_id or last_video_id == 'None' or last_video_id.strip() == '':
-        log(profile_id, f"🔧 Setting baseline...", "INFO")
-        try:
-            baseline_video_id, baseline_url, baseline_title = get_latest_shorts_video_ytdlp(channel_url)
-            if baseline_video_id:
-                update_last_video_id_in_mapping_by_id(channel_url, profile_id, baseline_video_id)
-                last_video_id = baseline_video_id
-                log(profile_id, f"✅ Baseline set: {baseline_video_id}", "INFO")
-            else:
-                log(profile_id, f"❌ Cannot set baseline", "ERROR")
-                return
-        except Exception as e:
-            log(profile_id, f"❌ Baseline error: {e}", "ERROR")
-            return
-    
-    log(profile_id, f"▶️ Starting scan loop with baseline: {last_video_id}", "INFO")
-    
-    error_count = 0
-    
-    try:
-        while True:
-            loop_start = time.time()
-            
-            try:
-                log(profile_id, "🔍 Scanning for new video...", "INFO")
-                video_id, video_url, title = get_latest_shorts_video_ytdlp(channel_url)
-                
-                scan_time = time.time() - loop_start
-                
-                if video_id:
-                    error_count = 0  # Reset on success
-                    log(profile_id, f"✅ Scan: {scan_time:.1f}s | ID: {video_id}", "TIMING")
-                
-                # Kiểm tra video mới
-                if video_id and video_id != last_video_id:
-                    log(profile_id, f"🎉 NEW VIDEO DETECTED!", "NEW")
-                    log(profile_id, f"   📊 Old: {last_video_id}", "NEW", substep=True)
-                    log(profile_id, f"   🆕 New: {video_id}", "NEW", substep=True)
-                                        log(profile_id, f"   📝 Title: {title}", "NEW", substep=True)
-                    
-                    # Cập nhật baseline ngay
-                    update_last_video_id_in_mapping_by_id(channel_url, profile_id, video_id)
-                    last_video_id = video_id
-                    
-                    # Submit xử lý video trong background với executor riêng
-                    future = profile_executor.submit(
-                        download_edit_upload_video, 
-                        profile_id, video_id, video_url, title
-                    )
-                    log(profile_id, f"✅ Processing task submitted", "INFO")
-                    
-                    # Sleep ngắn khi có video mới
-                    time.sleep(random.uniform(0.3, 0.8))
-                      
-                elif video_id:
-                    log(profile_id, f"⏸️ Same as baseline: {video_id}", "INFO")
-                    time.sleep(random.uniform(0.3, 0.8))
-                    
-                else:
-                    # Lỗi scan
-                    error_count += 1
-                    log(profile_id, f"❌ Scan failed (#{error_count})", "ERROR")
-                    
-                    # Dynamic sleep dựa trên số lỗi
-                    if error_count <= 3:
-                        sleep_time = random.uniform(2, 4)
-                    elif error_count <= 8:
-                        sleep_time = random.uniform(8, 15)
-                    else:
-                        sleep_time = random.uniform(25, 45)
-                        log(profile_id, f"⚠️ Too many errors, long sleep", "WARNING")
-                    
-                    time.sleep(sleep_time)
-                
-            except Exception as loop_error:
-                error_count += 1
-                log(profile_id, f"❌ Loop error #{error_count}: {str(loop_error)[:100]}", "ERROR")
-                
-                sleep_time = min(25, error_count * 2)
-                time.sleep(sleep_time)
-                
-    except Exception as e:
-        log(profile_id, f"❌ Worker error: {e}", "ERROR")
-    finally:
-        # Cleanup executor
-        profile_executor.shutdown(wait=False)
-
-# Tạo ThreadPoolExecutor toàn cục tăng lên 30 workers để xử lý SIÊU NHANH
-edit_upload_pool = ThreadPoolExecutor(max_workers=30, thread_name_prefix="EditUpload")
-
 def upload_with_retry(profile_id, processed_path, title, hashtags, max_retries=2):
     """Upload với retry mechanism NHANH"""
     for attempt in range(max_retries):
@@ -692,7 +494,7 @@ def upload_with_retry(profile_id, processed_path, title, hashtags, max_retries=2
             
             if attempt > 0:
                 # Ngắn hơn delay retry
-                WebDriverWait(lambda: None, 3).until(lambda d: True)
+                time.sleep(3)
                 log(profile_id, f"⏳ 3s retry delay", "INFO", substep=True)
             
             result = upload_to_tiktok_gpmlogin(profile_id, processed_path, title, hashtags)
@@ -793,9 +595,110 @@ def download_edit_upload_video(profile_id, video_id, video_url, title):
         log(profile_id, f"❌ [{now_str}] PIPELINE ERROR: {str(e)[:100]}", "ERROR")
         log(profile_id, f"   📊 Error at: {total_time:.1f}s", "TIMING", substep=True)
 
-def edit_and_upload(profile_id, video_path, processed_path, title, hashtags, start_time, description=None):
-    """Legacy function - được thay thế bởi download_edit_upload_video"""
-    pass
+def worker_selenium(channel_url, profile_id):
+    """Worker tối ưu với ThreadPoolExecutor riêng cho mỗi profile"""
+    log(profile_id, f"🚀 Worker started (Optimized Pipeline)", "INFO")
+
+    # Tạo ThreadPoolExecutor riêng cho profile này
+    profile_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix=f"Profile_{profile_id}")
+    
+    try:
+        last_video_id, mapping_idx, mapping_df = get_last_video_id_from_mapping(channel_url, profile_id)
+        log(profile_id, f"✅ Mapping loaded. Baseline: {last_video_id}", "INFO")
+    except Exception as mapping_error:
+        log(profile_id, f"❌ Mapping error: {mapping_error}", "ERROR")
+        return
+    
+    # Auto-set baseline nếu chưa có
+    if not last_video_id or last_video_id == 'None' or last_video_id.strip() == '':
+        log(profile_id, f"🔧 Setting baseline...", "INFO")
+        try:
+            baseline_video_id, baseline_url, baseline_title = get_latest_shorts_video_ytdlp(channel_url)
+            if baseline_video_id:
+                update_last_video_id_in_mapping_by_id(channel_url, profile_id, baseline_video_id)
+                last_video_id = baseline_video_id
+                log(profile_id, f"✅ Baseline set: {baseline_video_id}", "INFO")
+            else:
+                log(profile_id, f"❌ Cannot set baseline", "ERROR")
+                return
+        except Exception as e:
+            log(profile_id, f"❌ Baseline error: {e}", "ERROR")
+            return
+    
+    log(profile_id, f"▶️ Starting scan loop with baseline: {last_video_id}", "INFO")
+    
+    error_count = 0
+    
+    try:
+        while True:
+            loop_start = time.time()
+            
+            try:
+                log(profile_id, "🔍 Scanning for new video...", "INFO")
+                video_id, video_url, title = get_latest_shorts_video_ytdlp(channel_url)
+                
+                scan_time = time.time() - loop_start
+                
+                if video_id:
+                    error_count = 0  # Reset on success
+                    log(profile_id, f"✅ Scan: {scan_time:.1f}s | ID: {video_id}", "TIMING")
+                
+                # Kiểm tra video mới
+                if video_id and video_id != last_video_id:
+                    log(profile_id, f"🎉 NEW VIDEO DETECTED!", "NEW")
+                    log(profile_id, f"   📊 Old: {last_video_id}", "NEW", substep=True)
+                    log(profile_id, f"   🆕 New: {video_id}", "NEW", substep=True)
+                    log(profile_id, f"   📝 Title: {title}", "NEW", substep=True)
+                    
+                    # Cập nhật baseline ngay
+                    update_last_video_id_in_mapping_by_id(channel_url, profile_id, video_id)
+                    last_video_id = video_id
+                    
+                    # Submit xử lý video trong background với executor riêng
+                    future = profile_executor.submit(
+                        download_edit_upload_video, 
+                        profile_id, video_id, video_url, title
+                    )
+                    log(profile_id, f"✅ Processing task submitted", "INFO")
+                    
+                    # Sleep ngắn khi có video mới
+                    time.sleep(random.uniform(0.3, 0.8))
+                    
+                elif video_id:
+                    log(profile_id, f"⏸️ Same as baseline: {video_id}", "INFO")
+                    time.sleep(random.uniform(0.3, 0.8))
+                    
+                else:
+                    # Lỗi scan
+                    error_count += 1
+                    log(profile_id, f"❌ Scan failed (#{error_count})", "ERROR")
+                    
+                    # Dynamic sleep dựa trên số lỗi
+                    if error_count <= 3:
+                        sleep_time = random.uniform(2, 4)
+                    elif error_count <= 8:
+                        sleep_time = random.uniform(8, 15)
+                    else:
+                        sleep_time = random.uniform(25, 45)
+                        log(profile_id, f"⚠️ Too many errors, long sleep", "WARNING")
+                    
+                    time.sleep(sleep_time)
+                
+            except Exception as loop_error:
+                error_count += 1
+                log(profile_id, f"❌ Loop error #{error_count}: {str(loop_error)[:100]}", "ERROR")
+                
+                sleep_time = min(25, error_count * 2)
+                time.sleep(sleep_time)
+                
+    except Exception as e:
+        log(profile_id, f"❌ Worker error: {e}", "ERROR")
+    finally:
+        # Cleanup executor
+        profile_executor.shutdown(wait=False)
+
+# Tạo ThreadPoolExecutor toàn cục tăng lên 30 workers để xử lý SIÊU NHANH
+edit_upload_pool = ThreadPoolExecutor(max_workers=30, thread_name_prefix="EditUpload")
 
 def main():
     """Main function với multiprocessing tối ưu cho 10+ channels"""
